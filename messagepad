@@ -1,3 +1,4 @@
 
 Key: BJKncbjVeHwalhCAGomId4rsZ3xt5axA
 Secret: MwEcgUJBay1Lx8ek
+curl -X POST "https://apidev-extgw.clp.com.hk/transform" -H "Accept: application/json; charset=utf-8" -H "Content-Type: application/x-www-form-urlencoded; charset=utf-8" -H "Date: Thu, 25 Sep 2025 09:36:34 GMT" -H "x-ca-key: BJKncbjVeHwalhCAGomId4rsZ3xt5axA" -H "x-ca-nonce: 3a2b38a6-8822-408a-9259-1d6af1a0af93" -H "x-ca-signature-method: HmacSHA256" -H "x-ca-timestamp: 1758792994267" -H "x-ca-signature: 5OCELiSbnDt4KIzrueXFwLX/ZyjpHt2kwy5ewwJLTws=" -H "x-ca-signature-headers: x-ca-key,x-ca-nonce,x-ca-signature-method,x-ca-timestamp" -H "Authorization: HMAC-SHA256 BJKncbjVeHwalhCAGomId4rsZ3xt5axA:5OCELiSbnDt4KIzrueXFwLX/ZyjpHt2kwy5ewwJLTws=" --data "username=xiaoming&password=123456789"
