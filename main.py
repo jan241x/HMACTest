@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import os
 import time
 import uuid
 from datetime import datetime
@@ -10,7 +11,7 @@ import requests
 
 
 class HMACConfig:
-    """HMAC配置类"""
+    """HMAC配置類 / HMAC configuration class"""
     def __init__(self, url, key, secret, path="/transform", method="POST"):
         self.url = url
         self.key = key
@@ -88,19 +89,81 @@ def generate_signature(method, accept, content_type, date, path, query_params, f
     return signature, string_to_sign
 
 
+def _load_env_file(env_path: str = ".env") -> None:
+    """簡易載入 .env 檔至環境變數（不依賴第三方）/ Lightweight .env loader (no third-party)."""
+    if not os.path.exists(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception:
+        # 載入失敗時忽略，使用預設配置 / Ignore failures and fall back to defaults
+        pass
+
+
+def _parse_kv_pairs(pairs: str) -> dict:
+    """將 key1=val1&key2=val2 形式的字串解析為字典 / Parse key1=val1&key2=val2 into dict."""
+    params = {}
+    if not pairs:
+        return params
+    for segment in pairs.split("&"):
+        if not segment:
+            continue
+        if "=" in segment:
+            k, v = segment.split("=", 1)
+            params[k] = v
+        else:
+            # 僅有鍵無值時設為空字串 / Empty string when value is missing
+            params[segment] = ""
+    return params
+
+
 def main(test_mode=False):
-    # 配置HMAC参数
+    # 1) 載入 .env / Load .env
+    _load_env_file()
+
+    # 2) 從環境變數讀取配置並設置預設值 / Read config from env with defaults
+    base_url = os.environ.get("HMAC_BASE_URL", "https://apidev-extgw.clp.com.hk")
+    path = os.environ.get("HMAC_PATH", "/transform")
+    full_url = os.environ.get("HMAC_URI") or (base_url.rstrip("/") + path)
+
+    method = os.environ.get("HMAC_METHOD", "POST").upper()
+    app_key = os.environ.get("HMAC_APP_KEY", "BJKncbjVeHwalhCAGomId4rsZ3xt5axA")
+    app_secret = os.environ.get("HMAC_APP_SECRET", "MwEcgUJBay1Lx8ek")
+
+    accept_override = os.environ.get("HMAC_ACCEPT")
+    content_type_override = os.environ.get("HMAC_CONTENT_TYPE")
+
+    query_pairs = os.environ.get("HMAC_QUERY", "")
+    body_pairs = os.environ.get("HMAC_BODY", "username=xiaoming&password=123456789")
+    query_params = _parse_kv_pairs(query_pairs)
+    form_params = _parse_kv_pairs(body_pairs)
+
+    # 配置 HMAC 參數 / Configure HMAC parameters
     config = HMACConfig(
-        url="https://apidev-extgw.clp.com.hk/transform",
-        key="appKey-example-1",
-        secret="appSecret-example-1",
-        path="/transform",
-        method="POST"
+        url=full_url,
+        key=app_key,
+        secret=app_secret,
+        path=path,
+        method=method
     )
-    
-    # 请求参数
-    query_params = {}
-    form_params = {"username": "xiaoming", "password": "123456789"}
+
+    # 可選覆蓋 Accept/Content-Type / Optional override
+    if accept_override:
+        config.accept = accept_override
+    if content_type_override:
+        config.content_type = content_type_override
+
     custom_headers = config.get_custom_headers()
 
     # Generate signature
@@ -124,7 +187,7 @@ def main(test_mode=False):
     # Try adding an Authorization header format
     # Format 1: HMAC-SHA256 key:signature
 
-    # Build and print equivalent curl command
+    # 產出等效 curl 指令 / Build equivalent curl command
     query_string = "&".join(f"{k}={v}" for k, v in query_params.items())
     url_with_query = f"{config.url}?{query_string}" if query_string else config.url
     form_string = "&".join(f"{k}={v}" for k, v in form_params.items())
@@ -145,45 +208,44 @@ def main(test_mode=False):
     # PowerShell often aliases `curl` to Invoke-WebRequest. Use curl.exe to force the real curl binary.
     curl_cmd_powershell = curl_cmd.replace("curl ", "curl.exe ", 1)
 
-    # Output results
-    print("=== HMAC Signature Test ===")
+    # 輸出結果 / Output results
+    print("=== HMAC 簽名測試 / HMAC Signature Test ===")
     print(f"URL: {config.url}")
-    print(f"Method: {config.method}")
-    print(f"Path: {config.path}")
-    print(f"Query Params: {query_params}")
-    print(f"Form Params: {form_params}")
-    print(f"\nStringToSign:")
+    print(f"方法/Method: {config.method}")
+    print(f"路徑/Path: {config.path}")
+    print(f"查詢參數/Query Params: {query_params}")
+    print(f"表單參數/Form Params: {form_params}")
+    print(f"\n簽名字串/StringToSign:")
     print(repr(string_to_sign))
-    print(f"\nSignature: {signature}")
-    print(f"\nRequest Headers:")
+    print(f"\n簽名/Signature: {signature}")
+    print(f"\n請求標頭/Request Headers:")
     for key, value in headers.items():
         print(f"  {key}: {value}")
-    print(f"\nEquivalent curl (bash/zsh):")
+    print(f"\n等效 curl（bash/zsh）/ Equivalent curl (bash/zsh):")
     print(curl_cmd)
-    print(f"\nEquivalent curl (Windows PowerShell):")
+    print(f"\n等效 curl（Windows PowerShell）/ Equivalent curl (Windows PowerShell):")
     print(curl_cmd_powershell)
     
     if not test_mode:
-        # Send request
+        # 發送請求 / Send request
         try:
             response = requests.post(config.url, headers=headers, params=query_params, data=form_params)
-            print(f"\nResponse code: {response.status_code}")
-            print(f"Response body: {response.text}")
-            print(f"\nResponse headers:")
+            print(f"\n回應代碼/Response code: {response.status_code}")
+            print(f"回應內文/Response body: {response.text}")
+            print(f"\n回應標頭/Response headers:")
             for key, value in response.headers.items():
                 print(f"  {key}: {value}")
 
             if response.status_code != 200:
-                error_msg = response.headers.get("X-Ca-Error-Message", "No error message")
-                print(f"\nError message: {error_msg}")
+                error_msg = response.headers.get("X-Ca-Error-Message", "No error message / 無錯誤訊息")
+                print(f"\n錯誤訊息/Error message: {error_msg}")
                 if "StringToSign" in error_msg:
-                    print("Server StringToSign:", error_msg)
+                    print("伺服器簽名字串/Server StringToSign:", error_msg)
                 
-                # 提供调试建议
         except requests.exceptions.ConnectionError as e:
-            print(f"\nconnection error: {e}")
+            print(f"\n連線錯誤/Connection error: {e}")
         except Exception as e:
-            print(f"\nrequest error: {e}")
+            print(f"\n請求錯誤/Request error: {e}")
 
 
 
